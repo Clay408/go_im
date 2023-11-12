@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -37,7 +38,7 @@ func (s *Server) Start() {
 	//关闭监听
 	defer listener.Close()
 
-	//监听服务器广播消息
+	//监听广播消息
 	go s.listenBroadCastMessage()
 
 	for {
@@ -60,8 +61,18 @@ func (s *Server) handler(conn net.Conn) {
 	user.Online()
 	//客户端消息监听
 	go s.listenPubMsgFromClient(user)
-	//当前Handler阻塞
-	select {}
+	for {
+		select {
+		case <-user.isAlive:
+			//啥都不用做
+		case <-time.After(time.Second * 30): //30秒不说话自动踢
+			user.SendMsg("你被踢了")
+			close(user.C)
+			//关闭连接
+			conn.Close()
+			return
+		}
+	}
 }
 
 // 客户端消息监听
@@ -82,6 +93,7 @@ func (s *Server) listenPubMsgFromClient(u *User) {
 		//提取出用户消息
 		msg := string(buf[:n-1])
 		u.DoMessage(msg)
+		u.isAlive <- 1
 	}
 }
 
