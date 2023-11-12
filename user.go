@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
 )
 
@@ -28,6 +27,11 @@ func NewUser(server *Server, conn net.Conn) *User {
 	return user
 }
 
+// SendMsg 给当前用户发送消息
+func (u *User) SendMsg(msg string) {
+	u.Conn.Write([]byte(msg + "\n"))
+}
+
 // Online 用户上线功能
 func (u *User) Online() {
 	u.server.mapLock.Lock()
@@ -46,36 +50,23 @@ func (u *User) Offline() {
 	fmt.Println("当前在线人数：", len(u.server.OnlineMap))
 }
 
-// HandleClientPubMessage 用户广播消息处理业务
-func (u *User) HandleClientPubMessage() {
-	buf := make([]byte, 4096)
-	for {
-		n, err := u.Conn.Read(buf)
-		if n == 0 {
-			u.Offline()
-			return
-		}
-		if err != nil && err != io.EOF {
-			fmt.Println("Conn Read err : ", err)
-			return
-		}
-
-		//提取出用户消息
-		msg := string(buf[:n-1])
-		//广播消息
-		u.server.BroadCast(u, msg)
-	}
-}
-
-// HandlerClientPriMessage 处理用户私聊的消息
-func (u *User) HandlerClientPriMessage() {
-
-}
-
 // ListenMessage 监听当前User channel 的方法，一旦有消息，就直接发送给客户端
 func (this *User) ListenMessage() {
 	for {
 		msg := <-this.C
-		this.Conn.Write([]byte(msg + "\n"))
+		this.SendMsg(msg)
+	}
+}
+
+// DoMessage 客户端消息处理
+func (u *User) DoMessage(msg string) {
+	if "who" == msg {
+		//查询在线用户
+		for _, user := range u.server.OnlineMap {
+			res := "[" + user.Addr + "]" + user.Name + "-> 在线"
+			u.SendMsg(res)
+		}
+	} else {
+		u.server.BroadCast(u, msg)
 	}
 }
